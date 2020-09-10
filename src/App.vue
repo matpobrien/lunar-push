@@ -38,23 +38,11 @@
         <label for="location">Location: </label>
         <input type="text" name="location" id="location" v-model="location" />
         <input type="submit" id="submit" />
-        <h3 id="hidden" class="alert">
+        <h3 id="hidden" class="alert" v-if="showAlert">
           No tide station found. Please try another city.
         </h3>
-        <!-- <label for="stations" id="stations"
-          >Please select the nearest tide station:
-        </label>
-        <select name="stations">
-          <option
-            :value="station.id"
-            v-for="station in stations"
-            :key="station.id"
-            >{{ station.name }}</option
-          >
-        </select> -->
       </form>
     </section>
-
     <div id="chart-content">
       <h1>Tide Information for {{ location }} on {{ today }}</h1>
       <div id="chart-container">
@@ -65,115 +53,175 @@
 </template>
 
 <script>
+  import Chart from "chart.js";
+
   const LOC_KEY = "109abfc0a41c4f7ca49144f18df50078";
   const TIDE_KEY = "e6b7fc92-7a1c-4e77-8702-447567b462d3";
-  import Chart from "chart.js";
+
+  const getLocationURL = (location) => {
+    return (
+      "https://api.opencagedata.com/geocode/v1/json?q=" +
+      encodeURIComponent(location) +
+      "&key=" +
+      LOC_KEY
+    );
+  };
+
+  const getTideURL = (lat, long, today) => {
+    return (
+      "https://www.worldtides.info/api/v2?extremes" +
+      "&date=" +
+      today +
+      "&lat=" +
+      lat +
+      "&lon=" +
+      long +
+      "&key=" +
+      TIDE_KEY
+    );
+  };
+
+  const getCurrentDate = () => {
+    const date = new Date();
+    let year = date.getFullYear();
+    let month = date.getMonth() + 1;
+    let day = date.getDate();
+    if (month < 10) {
+      month = "0" + month;
+    }
+    if (day < 10) {
+      day = "0" + day;
+    }
+    return `${year}-${month}-${day}`;
+  };
+
+  async function fetchLatLong(location) {
+    const res = await fetch(getLocationURL(location));
+    const { results } = await res.json();
+    const geometry = results[0].geometry;
+    return { lat: geometry.lat.toFixed(6), long: geometry.lng.toFixed(6) };
+  }
+
+  async function fetchTideAPI(lat, long, today) {
+    console.log(lat, long, today);
+    console.log(getTideURL);
+    // const res = await fetch(getTideURL(lat, long, this.today));
+    // return await res.json();
+    return {
+      status: 200,
+      callCount: 1,
+      copyright:
+        "Tidal data retrieved from www.worldtides.info. Copyright (c) 2014-2020 Brainware LLC. Licensed for use of individual spatial coordinates on behalf of by an end-user. Source data created by the Center for Operational Oceanographic Products and Services (CO-OPS) and is not subject to copyright protection. NO GUARANTEES ARE MADE ABOUT THE CORRECTNESS OF THIS DATA. You may not use it if anyone or anything could come to harm as a result of using it (e.g. for navigational purposes).",
+      requestLat: 33.768321,
+      requestLon: -118.195617,
+      responseLat: 33.7717,
+      responseLon: -118.21,
+      atlas: "NOAA",
+      station: "Long Beach, Inner Harbor, California",
+      extremes: [
+        {
+          dt: 1599553934,
+          date: "2020-09-08T08:32+0000",
+          height: 0.16,
+          type: "High",
+        },
+        {
+          dt: 1599572314,
+          date: "2020-09-08T13:38+0000",
+          height: -0.132,
+          type: "Low",
+        },
+        {
+          dt: 1599596635,
+          date: "2020-09-08T20:23+0000",
+          height: 0.528,
+          type: "High",
+        },
+        {
+          dt: 1599623786,
+          date: "2020-09-09T03:56+0000",
+          height: -0.316,
+          type: "Low",
+        },
+        {
+          dt: 1599647405,
+          date: "2020-09-09T10:30+0000",
+          height: 0.047,
+          type: "High",
+        },
+        {
+          dt: 1599659688,
+          date: "2020-09-09T13:54+0000",
+          height: -0.009,
+          type: "Low",
+        },
+        {
+          dt: 1599686362,
+          date: "2020-09-09T21:19+0000",
+          height: 0.506,
+          type: "High",
+        },
+        {
+          dt: 1599716584,
+          date: "2020-09-10T05:43+0000",
+          height: -0.375,
+          type: "Low",
+        },
+      ],
+    };
+  }
+
   export default {
     data() {
       return {
-        locationURL: "https://api.opencagedata.com/geocode/v1/json?q=",
         location: "",
-        lat: 0,
-        long: 0,
-        tideType: [],
-        tideURL: "https://www.worldtides.info/api/v2?extremes&",
-        tideHeight: [],
-        fullTideTime: [],
         chart: null,
-        stations: [],
         today: "",
+        showAlert: false,
       };
     },
     methods: {
-      currentDate() {
-        const date = new Date();
-        let year = date.getFullYear();
-        let month = date.getMonth() + 1;
-        let day = date.getDate();
-        if (month < 10) {
-          month = "0" + month;
-        }
-        if (day < 10) {
-          day = "0" + day;
-        }
-        this.today = `${year}-${month}-${day}`;
-      },
-      async fetchLatLong() {
-        const locationURL =
-          "https://api.opencagedata.com/geocode/v1/json?q=" +
-          encodeURIComponent(this.location) +
-          "&key=" +
-          LOC_KEY;
-        // this.createLocationURL();
-        try {
-          const res = await fetch(locationURL);
-          const { results } = await res.json();
-          this.long = results[0].geometry.lng.toFixed(6);
-          this.lat = results[0].geometry.lat.toFixed(6);
-        } catch (error) {
-          console.error(error);
-        }
-      },
-      resetTides() {
-        this.tideType = [];
-        this.tideHeight = [];
-        this.stations = [];
-        this.fullTideTime = [];
-      },
       async fetchTide() {
-        document.getElementById("hidden").classList.remove("alert");
-        this.resetTides();
-        this.currentDate();
-        await this.fetchLatLong();
-        const tideURL =
-          "https://www.worldtides.info/api/v2?extremes" +
-          "&date=" +
-          this.today +
-          "&lat=" +
-          this.lat +
-          "&lon=" +
-          this.long +
-          "&key=" +
-          TIDE_KEY;
         try {
-          const res = await fetch(tideURL);
-          const results = await res.json();
-          if (!results.error && this.chart == null) {
-            for (let i = 0; i < results.extremes.length; i++) {
-              this.tideType.push(results.extremes[i].type);
-              this.tideHeight.push(results.extremes[i].height);
-              this.fullTideTime.push(results.extremes[i].date);
-            }
-            var ctx = document.getElementById("my-chart").getContext("2d");
-            this.chart = new Chart(ctx, {
-              // The type of chart we want to create
-              type: "line",
-              // The data for our dataset
-              data: {
-                labels: this.fullTideTime,
-                datasets: [
-                  {
-                    label: this.location,
-                    backgroundColor: "#0077be",
-                    borderColor: "#00a9cc",
-                    data: this.tideHeight,
-                  },
-                ],
-              },
-              // Configuration options go here
-              options: {},
-            });
+          this.showAlert = false;
+          this.today = getCurrentDate();
+          const { lat, long } = await fetchLatLong(this.location);
+          const tideData = await fetchTideAPI(lat, long, this.today);
+          if (!tideData.error) {
+            this.createChart(tideData.extremes);
           } else {
-            document.getElementById("hidden").classList.add("alert");
+            this.showAlert = true;
           }
         } catch (error) {
           console.error(error);
         }
-        console.log(this.tideHeight);
+      },
+
+      createChart(extremes) {
+        if (this.chart) {
+          return;
+        }
+        var ctx = document.getElementById("my-chart").getContext("2d");
+        this.chart = new Chart(ctx, {
+          // The type of chart we want to create
+          type: "line",
+          // The data for our dataset
+          data: {
+            labels: extremes.map((extreme) => extreme.date),
+            datasets: [
+              {
+                label: this.location,
+                backgroundColor: "#0077be",
+                borderColor: "#00a9cc",
+                data: extremes.map((extreme) => extreme.height),
+              },
+            ],
+          },
+          // Configuration options go here
+          options: {},
+        });
       },
     },
-
-    mounted() {},
   };
 </script>
 
